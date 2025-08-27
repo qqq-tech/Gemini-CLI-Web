@@ -1317,6 +1317,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [isAtBottom]);
 
+  // Auto-scroll helper that respects manual scroll state
+  const maybeAutoScroll = useCallback(() => {
+    if (autoScrollToBottom && !isUserScrolledUp) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
+
   // Track previous session ID using useRef to properly detect session changes
   const previousSessionIdRef = useRef(null);
   
@@ -1538,6 +1545,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolId: part.id,
                   toolResult: null // Will be updated when result comes in
                 }]);
+                maybeAutoScroll();
               } else if (part.type === 'text' && part.text?.trim()) {
                 // Append streaming text to the last assistant message if possible
                 setChatMessages(prev => {
@@ -1554,6 +1562,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   }
                   return updated;
                 });
+                maybeAutoScroll();
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
@@ -1572,6 +1581,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               }
               return updated;
             });
+            maybeAutoScroll();
           }
           // Handle tool results from user messages (these come separately)
           if (messageData.role === 'user' && Array.isArray(messageData.content)) {
@@ -1601,6 +1611,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: latestMessage.data,
             timestamp: new Date()
           }]);
+          maybeAutoScroll();
           break;
         case 'gemini-interactive-prompt':
           // Handle interactive prompts from CLI
@@ -1610,6 +1621,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date(),
             isInteractivePrompt: true
           }]);
+          maybeAutoScroll();
           break;
         case 'gemini-error':
           // console.log('Gemini error, setting isLoading to false:', latestMessage.error);
@@ -1618,6 +1630,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: `Error: ${latestMessage.error}`,
             timestamp: new Date()
           }]);
+          maybeAutoScroll();
           setIsLoading(false);
           setCanAbortSession(false);
           setGeminiStatus(null);
@@ -1664,6 +1677,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: 'Session interrupted by user.',
             timestamp: new Date()
           }]);
+          maybeAutoScroll();
           break;
 
         case 'gemini-status':

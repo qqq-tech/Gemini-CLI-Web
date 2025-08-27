@@ -274,6 +274,7 @@ async function spawnGemini(command, options = {}, ws) {
         lastFilteredLength = filteredOutput.length;
 
         // Send only the new content as a message
+        
         ws.send(JSON.stringify({
           type: 'gemini-response',
           data: {
