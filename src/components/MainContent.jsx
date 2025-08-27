@@ -11,7 +11,7 @@
  * No session protection logic is implemented here - it's purely a props bridge.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
@@ -335,6 +335,7 @@ function MainContent({
         <div className={`h-full overflow-hidden ${activeTab === 'editor' ? 'block' : 'hidden'}`}>
           <EditorTab
             selectedProject={selectedProject}
+            selectedSession={selectedSession}
             ws={ws}
             sendMessage={sendMessage}
             messages={messages}

@@ -28,7 +28,7 @@ import { api } from '../utils/api';
 import { playNotificationSound } from '../utils/notificationSound';
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type &&
                     prevMessage.type === 'assistant' &&
                     !prevMessage.isToolUse && !message.isToolUse;
@@ -941,7 +941,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   <div className={`prose prose-sm max-w-none dark:prose-invert prose-zinc [&_code]:!bg-transparent [&_code]:!p-0 ${message.type === 'error' ? 'select-text cursor-text' : ''}`} style={{ contain: 'layout' }}>
                     <ReactMarkdown
                       components={{
-                        code: ({node, inline, className, children, ...props}) => {
+                        code: ({ inline, children, ...props }) => {
                           return inline ? (
                             <strong className="text-gemini-600 dark:text-gemini-400 font-bold not-prose" {...props}>
                               {children}
@@ -1073,14 +1073,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   });
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
-  const [permissionMode, setPermissionMode] = useState('default');
+  const permissionMode = 'default';
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
   const [imageErrors, setImageErrors] = useState(new Map());
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const scrollContainerRef = useRef(null);
-  const [debouncedInput, setDebouncedInput] = useState('');
+  const wsRef = useRef(ws);
+  useEffect(() => {
+    wsRef.current = ws;
+  }, [ws]);
+  // Track last known scrollTop to distinguish user vs. programmatic scrolls
+  const lastScrollTopRef = useRef(0);
+  // Preserve scroll position when auto-scroll is paused
+  const pausedScrollTopRef = useRef(null);
+  // Flag to ignore scroll events triggered programmatically
+  const isProgrammaticScrollRef = useRef(false);
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   const [fileList, setFileList] = useState([]);
   const [filteredFiles, setFilteredFiles] = useState([]);
@@ -1092,13 +1101,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // When true, automatic scrolling during streaming responses is paused
   // until the user returns to the bottom.
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
-  const [showCommandMenu, setShowCommandMenu] = useState(false);
-  const [slashCommands, setSlashCommands] = useState([]);
-  const [filteredCommands, setFilteredCommands] = useState([]);
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
-  const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [geminiStatus, setGeminiStatus] = useState(null);
 
@@ -1282,6 +1285,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Define scroll functions early to avoid hoisting issues in useEffect dependencies
   const scrollToBottom = useCallback((instant = false) => {
     if (scrollContainerRef.current) {
+      isProgrammaticScrollRef.current = true;
       if (instant) {
         scrollContainerRef.current.classList.add('scroll-instant');
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
@@ -1292,27 +1296,44 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       } else {
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
+      lastScrollTopRef.current = scrollContainerRef.current.scrollTop;
       setIsAutoScrollPaused(false);
+      pausedScrollTopRef.current = null;
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
+      });
     }
   }, []);
 
-  // Check if user is near the bottom of the scroll container
-  const isNearBottom = useCallback(() => {
+  // Check if user is at the bottom of the scroll container
+  const isAtBottom = useCallback(() => {
     if (!scrollContainerRef.current) {
       return false;
     }
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 50px of the bottom
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Treat as bottom only when the user is effectively at the end
+    return Math.abs(scrollHeight - scrollTop - clientHeight) <= 1;
   }, []);
 
-  // Handle scroll events to detect when user manually scrolls up
+  // Handle scroll events to detect when user manually scrolls away from the bottom
   const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current) {
-      const nearBottom = isNearBottom();
-      setIsAutoScrollPaused(!nearBottom);
+    if (!scrollContainerRef.current) {
+      return;
     }
-  }, [isNearBottom]);
+    const { scrollTop } = scrollContainerRef.current;
+    lastScrollTopRef.current = scrollTop;
+    if (isProgrammaticScrollRef.current) {
+      return;
+    }
+    const atBottom = isAtBottom();
+    if (atBottom) {
+      setIsAutoScrollPaused(false);
+      pausedScrollTopRef.current = null;
+    } else {
+      setIsAutoScrollPaused(true);
+      pausedScrollTopRef.current = scrollTop;
+    }
+  }, [isAtBottom]);
 
   // Track previous session ID using useRef to properly detect session changes
   const previousSessionIdRef = useRef(null);
@@ -1401,9 +1422,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (selectedProject) {
       // Always load saved input draft for the project
       const savedInput = localStorage.getItem(`draft_input_${selectedProject.name}`) || '';
-      if (savedInput !== input) {
-        setInput(savedInput);
-      }
+      setInput(savedInput);
     }
   }, [selectedProject?.name]);
 
@@ -1772,15 +1791,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input, cursorPosition, fileList]);
 
-  // Debounced input handling
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedInput(input);
-    }, 150); // 150ms debounce
-
-    return () => clearTimeout(timer);
-  }, [input]);
-
   // Show only recent messages for better performance
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) {
@@ -1789,37 +1799,15 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
-  // Capture scroll position before render when auto-scroll is disabled
   useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = {
-        height: container.scrollHeight,
-        top: container.scrollTop
-      };
+    if (!scrollContainerRef.current || chatMessages.length === 0) {
+      return;
     }
-  });
-
-  useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      if (autoScrollToBottom) {
-        // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
-        if (!isAutoScrollPaused) {
-          setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
-        }
-      } else {
-        // When auto-scroll is disabled, preserve the visual position
-        const container = scrollContainerRef.current;
-        const prevHeight = scrollPositionRef.current.height;
-        const prevTop = scrollPositionRef.current.top;
-        const newHeight = container.scrollHeight;
-        const heightDiff = newHeight - prevHeight;
-        // If content was added above the current view, adjust scroll position
-        if (heightDiff > 0 && prevTop > 0) {
-          container.scrollTop = prevTop + heightDiff;
-        }
-      }
+    if (autoScrollToBottom && !isAutoScrollPaused) {
+      setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
+    } else if (isAutoScrollPaused && pausedScrollTopRef.current !== null) {
+      // Maintain user's viewport when auto-scroll is paused
+      scrollContainerRef.current.scrollTop = pausedScrollTopRef.current;
     }
   }, [chatMessages, isAutoScrollPaused, scrollToBottom, autoScrollToBottom]);
 
@@ -2176,13 +2164,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   const handleTextareaClick = (e) => {
     setCursorPosition(e.target.selectionStart);
-  };
-
-  const handleNewSession = () => {
-    setChatMessages([]);
-    setInput('');
-    setIsLoading(false);
-    setCanAbortSession(false);
   };
 
   const handleAbortSession = () => {
