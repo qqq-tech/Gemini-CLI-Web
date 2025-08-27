@@ -1088,7 +1088,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorPosition, setCursorPosition] = useState(0);
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
   const [canAbortSession, setCanAbortSession] = useState(false);
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  // Track whether the user has manually scrolled away from the bottom.
+  // When true, automatic scrolling during streaming responses is paused
+  // until the user returns to the bottom.
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
@@ -1289,7 +1292,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       } else {
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
-      setIsUserScrolledUp(false);
+      setIsAutoScrollPaused(false);
     }
   }, []);
 
@@ -1307,7 +1310,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const handleScroll = useCallback(() => {
     if (scrollContainerRef.current) {
       const nearBottom = isNearBottom();
-      setIsUserScrolledUp(!nearBottom);
+      setIsAutoScrollPaused(!nearBottom);
     }
   }, [isNearBottom]);
 
@@ -1802,7 +1805,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (scrollContainerRef.current && chatMessages.length > 0) {
       if (autoScrollToBottom) {
         // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
-        if (!isUserScrolledUp) {
+        if (!isAutoScrollPaused) {
           setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
         }
       } else {
@@ -1818,14 +1821,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-  }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
+  }, [chatMessages, isAutoScrollPaused, scrollToBottom, autoScrollToBottom]);
 
   // Scroll to bottom when component mounts with existing messages or when messages first load
   useEffect(() => {
     if (scrollContainerRef.current && chatMessages.length > 0) {
       // Always scroll to bottom when messages first load (user expects to see latest)
       // Also reset scroll state
-      setIsUserScrolledUp(false);
+      setIsAutoScrollPaused(false);
       setTimeout(() => scrollToBottom(true), 200); // Instant scroll on initial load
     }
   }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
@@ -1999,7 +2002,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     });
 
     // Always scroll to bottom when user sends a message and reset scroll state
-    setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Gemini's response
+    setIsAutoScrollPaused(false); // Reset scroll state so auto-scroll works for Gemini's response
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
@@ -2325,7 +2328,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             </div>
 
             {/* Scroll to bottom button - positioned next to mode indicator */}
-            {isUserScrolledUp && chatMessages.length > 0 && (
+            {isAutoScrollPaused && chatMessages.length > 0 && (
               <button
                 onClick={scrollToBottom}
                 className="w-8 h-8 bg-gemini-600 hover:bg-gemini-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gemini-500 focus:ring-offset-2 dark:ring-offset-gray-800"
