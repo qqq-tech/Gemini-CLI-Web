@@ -262,14 +262,14 @@ async function spawnGemini(command, options = {}, ws) {
         return true;
       });
       
-      const filteredOutput = filteredLines.join('\n').trim();
-      
-      if (filteredOutput) {
+      const filteredOutput = filteredLines.join('\n');
+
+      if (filteredOutput.trim()) {
         // Debug - Gemini response
-        
-        // Accumulate the full response
-        fullResponse += (fullResponse ? '\n' : '') + filteredOutput;
-        
+
+        // Accumulate the full response without forcing newlines between chunks
+        fullResponse += filteredOutput;
+
         // Send the filtered output as a message
         ws.send(JSON.stringify({
           type: 'gemini-response',

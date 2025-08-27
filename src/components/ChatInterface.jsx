@@ -1118,6 +1118,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, []);
 
+  const appendAssistantText = useCallback((text) => {
+    setChatMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last && last.type === 'assistant' && !last.isToolUse && !last.isInteractivePrompt) {
+        return [...prev.slice(0, -1), { ...last, content: last.content + text }];
+      }
+      return [...prev, { type: 'assistant', content: text, timestamp: new Date() }];
+    });
+  }, []);
+
   // Load session messages from API
   const loadSessionMessages = useCallback(async (projectName, sessionId) => {
     if (!projectName || !sessionId) {
@@ -1529,22 +1539,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolId: part.id,
                   toolResult: null // Will be updated when result comes in
                 }]);
-              } else if (part.type === 'text' && part.text?.trim()) {
-                // Add regular text message
-                setChatMessages(prev => [...prev, {
-                  type: 'assistant',
-                  content: part.text,
-                  timestamp: new Date()
-                }]);
+              } else if (part.type === 'text' && part.text) {
+                appendAssistantText(part.text);
               }
             }
-          } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Add regular text message
-            setChatMessages(prev => [...prev, {
-              type: 'assistant',
-              content: messageData.content,
-              timestamp: new Date()
-            }]);
+          } else if (typeof messageData.content === 'string' && messageData.content) {
+            appendAssistantText(messageData.content);
           }
           // Handle tool results from user messages (these come separately)
           if (messageData.role === 'user' && Array.isArray(messageData.content)) {
