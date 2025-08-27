@@ -1311,6 +1311,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [isNearBottom]);
 
+  // Auto-scroll helper that respects manual scroll state
+  const maybeAutoScroll = useCallback(() => {
+    if (autoScrollToBottom && !isUserScrolledUp) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
+
   // Track previous session ID using useRef to properly detect session changes
   const previousSessionIdRef = useRef(null);
   
@@ -1529,22 +1536,43 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolId: part.id,
                   toolResult: null // Will be updated when result comes in
                 }]);
+                maybeAutoScroll();
               } else if (part.type === 'text' && part.text?.trim()) {
-                // Add regular text message
-                setChatMessages(prev => [...prev, {
-                  type: 'assistant',
-                  content: part.text,
-                  timestamp: new Date()
-                }]);
+                // Append streaming text to the last assistant message if possible
+                setChatMessages(prev => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last && last.type === 'assistant' && !last.isToolUse) {
+                    last.content += part.text;
+                  } else {
+                    updated.push({
+                      type: 'assistant',
+                      content: part.text,
+                      timestamp: new Date()
+                    });
+                  }
+                  return updated;
+                });
+                maybeAutoScroll();
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Add regular text message
-            setChatMessages(prev => [...prev, {
-              type: 'assistant',
-              content: messageData.content,
-              timestamp: new Date()
-            }]);
+            // Append streaming text to the last assistant message if possible
+            setChatMessages(prev => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last && last.type === 'assistant' && !last.isToolUse) {
+                last.content += messageData.content;
+              } else {
+                updated.push({
+                  type: 'assistant',
+                  content: messageData.content,
+                  timestamp: new Date()
+                });
+              }
+              return updated;
+            });
+            maybeAutoScroll();
           }
           // Handle tool results from user messages (these come separately)
           if (messageData.role === 'user' && Array.isArray(messageData.content)) {
@@ -1574,6 +1602,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: latestMessage.data,
             timestamp: new Date()
           }]);
+          maybeAutoScroll();
           break;
         case 'gemini-interactive-prompt':
           // Handle interactive prompts from CLI
@@ -1583,6 +1612,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             timestamp: new Date(),
             isInteractivePrompt: true
           }]);
+          maybeAutoScroll();
           break;
         case 'gemini-error':
           // console.log('Gemini error, setting isLoading to false:', latestMessage.error);
@@ -1591,6 +1621,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: `Error: ${latestMessage.error}`,
             timestamp: new Date()
           }]);
+          maybeAutoScroll();
           setIsLoading(false);
           setCanAbortSession(false);
           setGeminiStatus(null);
@@ -1637,6 +1668,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             content: 'Session interrupted by user.',
             timestamp: new Date()
           }]);
+          maybeAutoScroll();
           break;
 
         case 'gemini-status':
