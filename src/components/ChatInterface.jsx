@@ -1088,8 +1088,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [cursorPosition, setCursorPosition] = useState(0);
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
   const [canAbortSession, setCanAbortSession] = useState(false);
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
+  // Track whether the user has manually scrolled away from the bottom.
+  // When true, automatic scrolling during streaming responses is paused
+  // until the user returns to the bottom.
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
@@ -1289,27 +1291,31 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       } else {
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
-      setIsUserScrolledUp(false);
+      setIsAutoScrollPaused(false);
     }
   }, []);
 
-  // Check if user is near the bottom of the scroll container
-  const isNearBottom = useCallback(() => {
+  // Check if user is at the bottom of the scroll container
+  const isAtBottom = useCallback(() => {
     if (!scrollContainerRef.current) {
       return false;
     }
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 50px of the bottom
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Allow small threshold to account for sub-pixel rendering
+    return Math.abs(scrollHeight - scrollTop - clientHeight) <= 5;
   }, []);
 
-  // Handle scroll events to detect when user manually scrolls up
+  // Handle scroll events to detect when user manually scrolls away from the bottom
   const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current) {
-      const nearBottom = isNearBottom();
-      setIsUserScrolledUp(!nearBottom);
+    if (!scrollContainerRef.current) {
+      return;
     }
-  }, [isNearBottom]);
+    if (isAtBottom()) {
+      setIsAutoScrollPaused(false);
+    } else {
+      setIsAutoScrollPaused(true);
+    }
+  }, [isAtBottom]);
 
   // Auto-scroll helper that respects manual scroll state
   const maybeAutoScroll = useCallback(() => {
@@ -1453,6 +1459,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
       // console.log('Received WebSocket message:', latestMessage.type, latestMessage);
+
+      // Determine if user was at bottom before processing the message
+      const shouldScroll = isAtBottom();
 
       switch (latestMessage.type) {
         case 'session-created':
@@ -1712,8 +1721,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break; }
 
       }
+
+      // Auto-scroll only if user was at the bottom before new content arrived
+      if (shouldScroll && autoScrollToBottom) {
+        setTimeout(() => scrollToBottom(), 50);
+      }
     }
-  }, [messages]);
+  }, [messages, autoScrollToBottom, isAtBottom, scrollToBottom]);
 
   // Load file list when project changes
   useEffect(() => {
@@ -1800,46 +1814,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
-  // Capture scroll position before render when auto-scroll is disabled
-  useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = {
-        height: container.scrollHeight,
-        top: container.scrollTop
-      };
-    }
-  });
-
-  useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      if (autoScrollToBottom) {
-        // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
-        if (!isUserScrolledUp) {
-          setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
-        }
-      } else {
-        // When auto-scroll is disabled, preserve the visual position
-        const container = scrollContainerRef.current;
-        const prevHeight = scrollPositionRef.current.height;
-        const prevTop = scrollPositionRef.current.top;
-        const newHeight = container.scrollHeight;
-        const heightDiff = newHeight - prevHeight;
-        // If content was added above the current view, adjust scroll position
-        if (heightDiff > 0 && prevTop > 0) {
-          container.scrollTop = prevTop + heightDiff;
-        }
-      }
-    }
-  }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
 
   // Scroll to bottom when component mounts with existing messages or when messages first load
   useEffect(() => {
     if (scrollContainerRef.current && chatMessages.length > 0) {
       // Always scroll to bottom when messages first load (user expects to see latest)
       // Also reset scroll state
-      setIsUserScrolledUp(false);
+      setIsAutoScrollPaused(false);
       setTimeout(() => scrollToBottom(true), 200); // Instant scroll on initial load
     }
   }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
@@ -2013,7 +1994,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     });
 
     // Always scroll to bottom when user sends a message and reset scroll state
-    setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Gemini's response
+    setIsAutoScrollPaused(false); // Reset scroll state so auto-scroll works for Gemini's response
     setTimeout(() => scrollToBottom(), 100); // Longer delay to ensure message is rendered
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
@@ -2339,7 +2320,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             </div>
 
             {/* Scroll to bottom button - positioned next to mode indicator */}
-            {isUserScrolledUp && chatMessages.length > 0 && (
+            {isAutoScrollPaused && chatMessages.length > 0 && (
               <button
                 onClick={scrollToBottom}
                 className="w-8 h-8 bg-gemini-600 hover:bg-gemini-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gemini-500 focus:ring-offset-2 dark:ring-offset-gray-800"
