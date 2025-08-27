@@ -1453,6 +1453,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const latestMessage = messages[messages.length - 1];
       // console.log('Received WebSocket message:', latestMessage.type, latestMessage);
 
+      // Determine if user was at bottom before processing the message
+      const shouldScroll = isAtBottom();
+
       switch (latestMessage.type) {
         case 'session-created':
           // New session created by Gemini CLI - we receive the real session ID here
@@ -1704,8 +1707,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break; }
 
       }
+
+      // Auto-scroll only if user was at the bottom before new content arrived
+      if (shouldScroll && autoScrollToBottom) {
+        setTimeout(() => scrollToBottom(), 50);
+      }
     }
-  }, [messages]);
+  }, [messages, autoScrollToBottom, isAtBottom, scrollToBottom]);
 
   // Load file list when project changes
   useEffect(() => {
@@ -1792,11 +1800,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
-  useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0 && autoScrollToBottom && !isAutoScrollPaused) {
-      setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
-    }
-  }, [chatMessages, isAutoScrollPaused, scrollToBottom, autoScrollToBottom]);
 
   // Scroll to bottom when component mounts with existing messages or when messages first load
   useEffect(() => {

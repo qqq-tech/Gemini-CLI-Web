@@ -240,16 +240,16 @@ async function spawnGemini(command, options = {}, ws) {
     
     // Handle stdout (Gemini outputs plain text)
     let outputBuffer = '';
-    
+    let lastFilteredLength = 0; // Track length of content already sent
+
     geminiProcess.stdout.on('data', (data) => {
-      const rawOutput = data.toString();
-      outputBuffer += rawOutput;
-      // Debug - Raw Gemini stdout
+      // Accumulate raw output chunks
+      outputBuffer += data.toString();
       hasReceivedOutput = true;
       clearTimeout(timeout);
-      
+
       // Filter out debug messages and system messages
-      const lines = rawOutput.split('\n');
+      const lines = outputBuffer.split('\n');
       const filteredLines = lines.filter(line => {
         // Skip debug messages
         if (line.includes('[DEBUG]') ||
@@ -261,45 +261,47 @@ async function spawnGemini(command, options = {}, ws) {
         }
         return true;
       });
-      
+
       // Join lines without trimming to preserve spacing across streamed chunks
       const filteredOutput = filteredLines.join('\n');
-      
-      if (filteredOutput) {
-        // Debug - Gemini response
-        
+
+      // Determine only the new portion since last send to avoid duplicates
+      const newContent = filteredOutput.slice(lastFilteredLength);
+
+      if (newContent) {
         // Accumulate the full response without inserting extra newlines
-        fullResponse += filteredOutput;
-        
-        // Send the filtered output as a message
+        fullResponse += newContent;
+        lastFilteredLength = filteredOutput.length;
+
+        // Send only the new content as a message
         ws.send(JSON.stringify({
           type: 'gemini-response',
           data: {
             type: 'message',
-            content: filteredOutput
+            content: newContent
           }
         }));
       }
-      
+
       // For new sessions, create a session ID
       if (!sessionId && !sessionCreatedSent && !capturedSessionId) {
         capturedSessionId = `gemini_${Date.now()}`;
         sessionCreatedSent = true;
-        
+
         // Create session in session manager
         sessionManager.createSession(capturedSessionId, cwd || process.cwd());
-        
+
         // Save the user message now that we have a session ID
         if (command) {
           sessionManager.addMessage(capturedSessionId, 'user', command);
         }
-        
+
         // Update process key with captured session ID
         if (processKey !== capturedSessionId) {
           activeGeminiProcesses.delete(processKey);
           activeGeminiProcesses.set(capturedSessionId, geminiProcess);
         }
-        
+
         ws.send(JSON.stringify({
           type: 'session-created',
           sessionId: capturedSessionId
