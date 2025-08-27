@@ -1092,7 +1092,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // When true, automatic scrolling during streaming responses is paused
   // until the user returns to the bottom.
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
@@ -1296,23 +1295,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
-  // Check if user is near the bottom of the scroll container
-  const isNearBottom = useCallback(() => {
+  // Check if user is at the bottom of the scroll container
+  const isAtBottom = useCallback(() => {
     if (!scrollContainerRef.current) {
       return false;
     }
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 50px of the bottom
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Treat as bottom only when the user is effectively at the end
+    return Math.abs(scrollHeight - scrollTop - clientHeight) <= 1;
   }, []);
 
-  // Handle scroll events to detect when user manually scrolls up
+  // Handle scroll events to detect when user manually scrolls away from the bottom
   const handleScroll = useCallback(() => {
     if (scrollContainerRef.current) {
-      const nearBottom = isNearBottom();
-      setIsAutoScrollPaused(!nearBottom);
+      const atBottom = isAtBottom();
+      setIsAutoScrollPaused(!atBottom);
     }
-  }, [isNearBottom]);
+  }, [isAtBottom]);
 
   // Track previous session ID using useRef to properly detect session changes
   const previousSessionIdRef = useRef(null);
@@ -1789,37 +1788,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
-  // Capture scroll position before render when auto-scroll is disabled
   useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = {
-        height: container.scrollHeight,
-        top: container.scrollTop
-      };
-    }
-  });
-
-  useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      if (autoScrollToBottom) {
-        // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
-        if (!isAutoScrollPaused) {
-          setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
-        }
-      } else {
-        // When auto-scroll is disabled, preserve the visual position
-        const container = scrollContainerRef.current;
-        const prevHeight = scrollPositionRef.current.height;
-        const prevTop = scrollPositionRef.current.top;
-        const newHeight = container.scrollHeight;
-        const heightDiff = newHeight - prevHeight;
-        // If content was added above the current view, adjust scroll position
-        if (heightDiff > 0 && prevTop > 0) {
-          container.scrollTop = prevTop + heightDiff;
-        }
-      }
+    if (scrollContainerRef.current && chatMessages.length > 0 && autoScrollToBottom && !isAutoScrollPaused) {
+      setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
     }
   }, [chatMessages, isAutoScrollPaused, scrollToBottom, autoScrollToBottom]);
 
