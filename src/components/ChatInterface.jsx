@@ -1310,7 +1310,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (!scrollContainerRef.current) {
       return;
     }
-    if (!isAtBottom()) {
+    if (isAtBottom()) {
+      setIsAutoScrollPaused(false);
+    } else {
       setIsAutoScrollPaused(true);
     }
   }, [isAtBottom]);
