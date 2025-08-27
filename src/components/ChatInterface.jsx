@@ -1301,15 +1301,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       return false;
     }
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Treat as bottom only when the user is effectively at the end
-    return Math.abs(scrollHeight - scrollTop - clientHeight) <= 1;
+    // Allow small threshold to account for sub-pixel rendering
+    return Math.abs(scrollHeight - scrollTop - clientHeight) <= 5;
   }, []);
 
   // Handle scroll events to detect when user manually scrolls away from the bottom
   const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current) {
-      const atBottom = isAtBottom();
-      setIsAutoScrollPaused(!atBottom);
+    if (!scrollContainerRef.current) {
+      return;
+    }
+    if (!isAtBottom()) {
+      setIsAutoScrollPaused(true);
     }
   }, [isAtBottom]);
 
