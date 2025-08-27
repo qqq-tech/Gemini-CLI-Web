@@ -1092,7 +1092,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // When true, automatic scrolling during streaming responses is paused
   // until the user returns to the bottom.
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
@@ -1789,32 +1788,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
 
-  // Capture scroll position before render when auto-scroll is disabled or paused
   useEffect(() => {
-    if ((isAutoScrollPaused || !autoScrollToBottom) && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = {
-        height: container.scrollHeight,
-        top: container.scrollTop
-      };
-    }
-  });
-
-  useEffect(() => {
-    // Maintain scroll position or auto-scroll depending on user interaction
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      if (autoScrollToBottom && !isAutoScrollPaused) {
-        setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
-      } else {
-        const container = scrollContainerRef.current;
-        const prevHeight = scrollPositionRef.current.height;
-        const prevTop = scrollPositionRef.current.top;
-        const newHeight = container.scrollHeight;
-        const heightDiff = newHeight - prevHeight;
-        if (heightDiff > 0 && prevTop > 0) {
-          container.scrollTop = prevTop + heightDiff;
-        }
-      }
+    if (scrollContainerRef.current && chatMessages.length > 0 && autoScrollToBottom && !isAutoScrollPaused) {
+      setTimeout(() => scrollToBottom(), 50); // Small delay to ensure DOM is updated
     }
   }, [chatMessages, isAutoScrollPaused, scrollToBottom, autoScrollToBottom]);
 
