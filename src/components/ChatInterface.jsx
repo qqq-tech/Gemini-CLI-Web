@@ -1530,21 +1530,39 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolResult: null // Will be updated when result comes in
                 }]);
               } else if (part.type === 'text' && part.text?.trim()) {
-                // Add regular text message
-                setChatMessages(prev => [...prev, {
-                  type: 'assistant',
-                  content: part.text,
-                  timestamp: new Date()
-                }]);
+                // Append streaming text to the last assistant message if possible
+                setChatMessages(prev => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last && last.type === 'assistant' && !last.isToolUse) {
+                    last.content += part.text;
+                  } else {
+                    updated.push({
+                      type: 'assistant',
+                      content: part.text,
+                      timestamp: new Date()
+                    });
+                  }
+                  return updated;
+                });
               }
             }
           } else if (typeof messageData.content === 'string' && messageData.content.trim()) {
-            // Add regular text message
-            setChatMessages(prev => [...prev, {
-              type: 'assistant',
-              content: messageData.content,
-              timestamp: new Date()
-            }]);
+            // Append streaming text to the last assistant message if possible
+            setChatMessages(prev => {
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              if (last && last.type === 'assistant' && !last.isToolUse) {
+                last.content += messageData.content;
+              } else {
+                updated.push({
+                  type: 'assistant',
+                  content: messageData.content,
+                  timestamp: new Date()
+                });
+              }
+              return updated;
+            });
           }
           // Handle tool results from user messages (these come separately)
           if (messageData.role === 'user' && Array.isArray(messageData.content)) {
