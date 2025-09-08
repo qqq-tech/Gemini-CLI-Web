@@ -97,10 +97,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 ))}
               </div>
             )}
-            <div
-              className="text-xs text-gemini-100 mt-1 text-right select-none pointer-events-none"
-              aria-hidden="true"
-            >
+            <div className="text-xs text-gemini-100 mt-1 text-right">
               {new Date(message.timestamp).toLocaleTimeString()}
             </div>
           </div>
@@ -985,10 +982,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               </div>
             )}
 
-            <div
-              className={`text-xs text-gray-500 dark:text-gray-400 mt-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100' : ''} select-none pointer-events-none`}
-              aria-hidden="true"
-            >
+            <div className={`text-xs text-gray-500 dark:text-gray-400 mt-1 ${isGrouped ? 'opacity-0 group-hover:opacity-100' : ''}`}>
               {new Date(message.timestamp).toLocaleTimeString()}
             </div>
           </div>
