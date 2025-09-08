@@ -295,12 +295,7 @@ function ToolUseFeedback({
       <div className="flex items-center gap-2">
         {headerIcon}
         <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{toolName}</div>
-        <div
-          className="text-xs text-zinc-500 dark:text-zinc-400 select-none pointer-events-none"
-          aria-hidden="true"
-        >
-          {timestampText}
-        </div>
+        <div className="text-xs text-zinc-500 dark:text-zinc-400">{timestampText}</div>
         {onShowSettings ? (
           <Button
             variant="ghost"
